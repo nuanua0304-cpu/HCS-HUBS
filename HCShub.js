@@ -211,8 +211,17 @@ client.on('interactionCreate', async i => {
     }
 });
 
-// 강제 로그인 시도 및 에러 출력
+// 강제 로그인 시도 및 공백 제거 처리
 console.log("[DISCORD] 봇 로그인을 시도합니다...");
-client.login(process.env.TOKEN).catch(err => {
-    console.error("[DISCORD LOGIN ERROR] 봇 로그인 실패:", err);
+const botToken = process.env.TOKEN ? process.env.TOKEN.trim() : "";
+
+if (!botToken) {
+    console.error("[DISCORD ERROR] TOKEN 환경 변수가 비어있습니다!");
+} else {
+    client.login(botToken).then(() => {
+        console.log("[DISCORD] 로그인 Promise 완료됨");
+    }).catch(err => {
+        console.error("[DISCORD LOGIN ERROR] 봇 로그인 실패:", err);
+    });
+}
 });
