@@ -244,6 +244,20 @@ client.on('interactionCreate', async i => {
 console.log("[DISCORD] 봇 로그인을 시도합니다...");
 const botToken = process.env.TOKEN ? process.env.TOKEN.trim() : "";
 
+// 로그인 자체가 멈춰있는 건지(네트워크/게이트웨이 문제) 판단하기 위한 타임아웃 감시
+let loginSettled = false;
+setTimeout(() => {
+    if (!loginSettled) {
+        console.error("[DISCORD TIMEOUT] 15초가 지나도 로그인이 완료도 실패도 되지 않았습니다. Discord 게이트웨이로의 아웃바운드 연결(웹소켓)이 막혀있거나 Node 버전 호환 문제일 가능성이 높습니다.");
+    }
+}, 15000);
+
+// 순수 네트워크 연결 확인용: Discord REST API에 직접 fetch를 날려본다
+fetch("https://discord.com/api/v10/gateway")
+    .then(r => r.json())
+    .then(json => console.log("[NETWORK CHECK] Discord API 접근 성공:", JSON.stringify(json)))
+    .catch(err => console.error("[NETWORK CHECK] Discord API 접근 실패 (아웃바운드 네트워크 문제로 보입니다):", err?.message || err));
+
 if (!botToken) {
     console.error("[DISCORD ERROR] TOKEN 환경 변수가 비어있습니다!");
 } else {
@@ -254,9 +268,11 @@ if (!botToken) {
 
     client.login(botToken)
         .then(() => {
+            loginSettled = true;
             console.log("[DISCORD] client.login() 호출이 정상적으로 완료되었습니다. ready 이벤트를 기다립니다...");
         })
         .catch(err => {
+            loginSettled = true;
             console.error("[DISCORD LOGIN ERROR] 봇 로그인 실패:", err?.message || err);
             if (err?.code) console.error("[DISCORD LOGIN ERROR CODE]", err.code);
         });
