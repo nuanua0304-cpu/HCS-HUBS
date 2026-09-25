@@ -12,7 +12,7 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -34,6 +34,8 @@ function isAdmin(member) {
 // ==========================================
 // Express API 엔드포인트
 // ==========================================
+
+// 1. 허브 정보 및 유저 인증 API (/api/hub)
 app.get('/api/hub', (req, res) => {
     const robloxName = req.query.roblox;
     if (!robloxName) {
@@ -42,7 +44,7 @@ app.get('/api/hub', (req, res) => {
 
     let matchedLicense = null;
     for (const [uid, data] of Object.entries(licensesData)) {
-        if (data.robloxName && data.robloxName.toLowerCase() === robloxName.toLowerCase()) {
+        if (data.robloxName === robloxName) {
             matchedLicense = data;
             break;
         }
@@ -61,6 +63,7 @@ app.get('/api/hub', (req, res) => {
     });
 });
 
+// 2. 실행 로그 기록 API (/api/log)
 app.get('/api/log', (req, res) => {
     const robloxName = req.query.roblox;
     const product = req.query.product;
@@ -68,6 +71,7 @@ app.get('/api/log', (req, res) => {
     res.json({ success: true });
 });
 
+// 3. 공개 스크립트 연결 API (/api/script) - 깃허브 Raw 링크 직접 활용
 app.get('/api/script', async (req, res) => {
     const robloxName = req.query.roblox;
     const productId = req.query.product;
@@ -76,6 +80,7 @@ app.get('/api/script', async (req, res) => {
         return res.status(400).send("print('잘못된 요청입니다.')");
     }
 
+    // 공개 저장소의 Raw 링크 매핑 (저장소 이름이 다르면 여기 주소만 맞게 수정하시면 됩니다)
     const scriptUrls = {
         pc_v1: "https://raw.githubusercontent.com/nuanua0304-cpu/HCS-UNSCRIPT/main/pc_v1.lua",
         pc_v2: "https://raw.githubusercontent.com/nuanua0304-cpu/HCS-UNSCRIPT/main/pc_v2.lua",
@@ -89,23 +94,35 @@ app.get('/api/script', async (req, res) => {
     };
 
     const targetUrl = scriptUrls[productId];
+
     if (!targetUrl) {
         return res.status(404).send("print('존재하지 않는 스크립트입니다.')");
     }
 
     try {
         const response = await fetch(targetUrl);
-        if (!response.ok) throw new Error("GitHub fetch failed");
+
+        if (!response.ok) {
+            throw new Error(`GitHub fetch error: ${response.status}`);
+        }
+
         const scriptText = await response.text();
-        res.send(scriptText);
+
+        if (!scriptText || scriptText.trim() === "") {
+            throw new Error("스크립트 내용이 비어 있습니다.");
+        }
+
+        console.log(`[SCRIPT] ${robloxName} ->${productId} 로드 성공`);
+        res.type('text/plain').send(scriptText);
+
     } catch (err) {
-        console.error("Script fetch error:", err);
+        console.error("[GITHUB] 스크립트 로드 오류:", err);
         res.status(500).send("print('스크립트 로드 중 오류가 발생했습니다.')");
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`[EXPRESS] HCShub 서버가 포트 ${PORT}에서 구동되었습니다! 🚀`);
+    console.log(`[EXPRESS] 서버가 포트 ${PORT}에서 구동되었습니다! 🚀`);
 });
 
 // ==========================================
@@ -142,7 +159,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName('라이센스제거')
         .setDescription('특정 디스코드 유저의 라이센스를 제거합니다.')
-        .addUserOption(o => o.setName('유저').setDescription('대상 유저').setRequired(true))
+        .addUserOption(o => o.setName('유저').setDescription('대상 디스코드 유저').setRequired(true))
 ];
 
 client.once('ready', async () => {
@@ -170,23 +187,12 @@ client.on('interactionCreate', async i => {
             const robloxName = i.options.getString('로블록스닉네임');
             const product = i.options.getString('제품');
 
-            if (!licensesData[targetUser.id]) {
-                licensesData[targetUser.id] = {
-                    robloxName: robloxName,
-                    discordName: targetUser.username,
-                    discordPfp: targetUser.displayAvatarURL({ extension: 'png', size: 256 }),
-                    products: []
-                };
-            }
-
-            licensesData[targetUser.id].robloxName = robloxName;
-            licensesData[targetUser.id].discordName = targetUser.username;
-            licensesData[targetUser.id].discordPfp = targetUser.displayAvatarURL({ extension: 'png', size: 256 });
-
-            if (!licensesData[targetUser.id].products.includes(product)) {
-                licensesData[targetUser.id].products.push(product);
-            }
-
+            licensesData[targetUser.id] = {
+                robloxName: robloxName,
+                discordName: targetUser.username,
+                discordPfp: targetUser.displayAvatarURL({ extension: 'png', size: 256 }),
+                products: [product]
+            };
             saveLicenses();
 
             const embed = new EmbedBuilder()
@@ -211,16 +217,14 @@ client.on('interactionCreate', async i => {
     }
 });
 
-// 공백 제거 및 확실한 로그인 처리
+// 봇 로그인 처리 (.trim()으로 공백 에러 방지)
 console.log("[DISCORD] 봇 로그인을 시도합니다...");
 const botToken = process.env.TOKEN ? process.env.TOKEN.trim() : "";
 
 if (!botToken) {
     console.error("[DISCORD ERROR] TOKEN 환경 변수가 비어있습니다!");
 } else {
-    client.login(botToken).then(() => {
-        console.log("[DISCORD] 로그인 성공 처리됨");
-    }).catch(err => {
+    client.login(botToken).catch(err => {
         console.error("[DISCORD LOGIN ERROR] 봇 로그인 실패:", err);
     });
 }
