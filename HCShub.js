@@ -11,6 +11,16 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
+// ==========================================
+// 전역 에러 핸들러 (조용히 죽는 것 방지)
+// ==========================================
+process.on('unhandledRejection', (reason) => {
+    console.error('[UNHANDLED REJECTION]', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('[UNCAUGHT EXCEPTION]', err);
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -137,6 +147,17 @@ const client = new Client({
     ]
 });
 
+// 게이트웨이 레벨 에러/경고도 놓치지 않도록 로깅
+client.on('error', (err) => {
+    console.error('[DISCORD CLIENT ERROR]', err);
+});
+client.on('shardError', (err) => {
+    console.error('[DISCORD SHARD ERROR]', err);
+});
+client.on('warn', (info) => {
+    console.warn('[DISCORD WARN]', info);
+});
+
 const productChoices = [
     { name: 'PC V1', value: 'pc_v1' },
     { name: 'PC V2', value: 'pc_v2' },
@@ -217,14 +238,26 @@ client.on('interactionCreate', async i => {
     }
 });
 
+// ==========================================
 // 봇 로그인 처리 (.trim()으로 공백 에러 방지)
+// ==========================================
 console.log("[DISCORD] 봇 로그인을 시도합니다...");
 const botToken = process.env.TOKEN ? process.env.TOKEN.trim() : "";
 
 if (!botToken) {
     console.error("[DISCORD ERROR] TOKEN 환경 변수가 비어있습니다!");
 } else {
-    client.login(botToken).catch(err => {
-        console.error("[DISCORD LOGIN ERROR] 봇 로그인 실패:", err);
-    });
+    // 토큰 형식이 명백히 잘못된 경우도 미리 감지 (길이/구조 체크)
+    if (botToken.split('.').length !== 3) {
+        console.warn("[DISCORD WARN] TOKEN 형식이 정상적인 봇 토큰과 달라 보입니다. 앞뒤 공백/따옴표를 다시 확인하세요.");
+    }
+
+    client.login(botToken)
+        .then(() => {
+            console.log("[DISCORD] client.login() 호출이 정상적으로 완료되었습니다. ready 이벤트를 기다립니다...");
+        })
+        .catch(err => {
+            console.error("[DISCORD LOGIN ERROR] 봇 로그인 실패:", err?.message || err);
+            if (err?.code) console.error("[DISCORD LOGIN ERROR CODE]", err.code);
+        });
 }
