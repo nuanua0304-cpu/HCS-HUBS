@@ -253,10 +253,22 @@ setTimeout(() => {
 }, 15000);
 
 // 순수 네트워크 연결 확인용: Discord REST API에 직접 fetch를 날려본다
-fetch("https://discord.com/api/v10/gateway")
-    .then(r => r.json())
-    .then(json => console.log("[NETWORK CHECK] Discord API 접근 성공:", JSON.stringify(json)))
-    .catch(err => console.error("[NETWORK CHECK] Discord API 접근 실패 (아웃바운드 네트워크 문제로 보입니다):", err?.message || err));
+fetch("https://discord.com/api/v10/gateway", {
+    headers: {
+        "User-Agent": "DiscordBot (https://github.com/nuanua0304-cpu/HCS-HUBS, 1.0.0)"
+    }
+})
+    .then(async r => {
+        const text = await r.text();
+        console.log(`[NETWORK CHECK] 상태 코드: ${r.status}, 서버 헤더: ${r.headers.get('server')}, cf-ray: ${r.headers.get('cf-ray') || '없음'}`);
+        try {
+            const json = JSON.parse(text);
+            console.log("[NETWORK CHECK] Discord API 접근 성공:", JSON.stringify(json));
+        } catch (e) {
+            console.error("[NETWORK CHECK] JSON이 아닌 응답을 받음 (Cloudflare 차단/챌린지 페이지로 추정). 응답 앞부분:", text.slice(0, 300));
+        }
+    })
+    .catch(err => console.error("[NETWORK CHECK] Discord API 접근 자체가 실패 (연결 자체가 안 됨):", err?.message || err));
 
 if (!botToken) {
     console.error("[DISCORD ERROR] TOKEN 환경 변수가 비어있습니다!");
