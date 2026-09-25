@@ -12,7 +12,7 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
@@ -34,12 +34,8 @@ function isAdmin(member) {
 // ==========================================
 // Express API 엔드포인트
 // ==========================================
-
-// 1. 허브 정보 및 유저 인증 API (/api/hub)
 app.get('/api/hub', (req, res) => {
     const robloxName = req.query.roblox;
-    console.log(`[AUTH CHECK] 접속 요청 닉네임: ${robloxName}`);
-
     if (!robloxName) {
         return res.json({ success: false, message: "roblox 쿼리가 누락되었습니다." });
     }
@@ -53,11 +49,9 @@ app.get('/api/hub', (req, res) => {
     }
 
     if (!matchedLicense) {
-        console.log(`[AUTH FAILED] 등록되지 않은 유저: ${robloxName}`);
         return res.json({ success: false, message: "등록되지 않은 유저입니다." });
     }
 
-    console.log(`[AUTH SUCCESS] 인증 성공 유저: ${robloxName}, 보유 제품:`, matchedLicense.products);
     res.json({
         success: true,
         robloxName: robloxName,
@@ -67,7 +61,6 @@ app.get('/api/hub', (req, res) => {
     });
 });
 
-// 2. 실행 로그 기록 API (/api/log)
 app.get('/api/log', (req, res) => {
     const robloxName = req.query.roblox;
     const product = req.query.product;
@@ -75,7 +68,6 @@ app.get('/api/log', (req, res) => {
     res.json({ success: true });
 });
 
-// 3. 비공개 스크립트 연결 API (/api/script) - 새 비공개 저장소(HCS-UNSCRIPT) Raw 링크 적용
 app.get('/api/script', async (req, res) => {
     const robloxName = req.query.roblox;
     const productId = req.query.product;
@@ -84,7 +76,6 @@ app.get('/api/script', async (req, res) => {
         return res.status(400).send("print('잘못된 요청입니다.')");
     }
 
-    // 새로 만드신 비공개 저장소(HCS-UNSCRIPT)의 Raw 링크 주소들로 매핑
     const scriptUrls = {
         pc_v1: "https://raw.githubusercontent.com/nuanua0304-cpu/HCS-UNSCRIPT/main/pc_v1.lua",
         pc_v2: "https://raw.githubusercontent.com/nuanua0304-cpu/HCS-UNSCRIPT/main/pc_v2.lua",
@@ -103,14 +94,8 @@ app.get('/api/script', async (req, res) => {
     }
 
     try {
-        const headers = { 'User-Agent': 'HCS-Server' };
-        if (process.env.GITHUB_TOKEN) {
-            headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
-        }
-
-        const response = await fetch(targetUrl, { headers });
+        const response = await fetch(targetUrl);
         if (!response.ok) throw new Error("GitHub fetch failed");
-        
         const scriptText = await response.text();
         res.send(scriptText);
     } catch (err) {
@@ -226,6 +211,8 @@ client.on('interactionCreate', async i => {
     }
 });
 
-if (process.env.TOKEN) {
-    client.login(process.env.TOKEN);
-}
+// 강제 로그인 시도 및 에러 출력
+console.log("[DISCORD] 봇 로그인을 시도합니다...");
+client.login(process.env.TOKEN).catch(err => {
+    console.error("[DISCORD LOGIN ERROR] 봇 로그인 실패:", err);
+});
